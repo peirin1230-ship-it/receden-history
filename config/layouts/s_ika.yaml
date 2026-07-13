@@ -1,0 +1,34 @@
+# 医科診療行為マスター(マスター種別 S)カラム定義
+# 出典: マスターファイル仕様説明書(令和8年版)ファイルレイアウト(2026-07-14確認)
+# 列番号は1始まり。詳細・注意点は docs/FILE_LAYOUTS.md §2, §5
+
+master: S
+code_length: 9
+
+layouts:
+  - id: r08
+    applies_to: [r08]
+    verified: true            # 一次資料(令和8年版仕様説明書)で確認済み
+    total_columns: 150
+    columns:
+      1:   {key: change_kubun,    name: 変更区分}
+      2:   {key: master_kind,     name: マスター種別, expect: "S"}
+      3:   {key: code,            name: 診療行為コード, pattern: '^\d{9}$'}
+      5:   {key: short_name,      name: 診療行為省略漢字名称}
+      7:   {key: short_kana,      name: 省略カナ名称}
+      11:  {key: price_type,      name: 点数識別}
+      12:  {key: price,           name: 新又は現点数}
+      59:  {key: name_chg_flag,   name: 漢字名称変更区分}
+      87:  {key: changed_at,      name: 変更年月日, pattern: '^(0|\d{8})$'}
+      88:  {key: abolished_at,    name: 廃止年月日, pattern: '^(0|\d{8})$'}
+      89:  {key: pub_order,       name: 公表順序番号}
+      113: {key: basic_name,      name: 基本漢字名称}
+      117: {key: tensuhyo_kubun,  name: 点数表区分番号}
+
+  - id: legacy_default
+    applies_to: [h24, h26, h28, h30, r01, r02, r04, r06]
+    verified: false           # TODO: validateの列プローブで世代ごとに確認し、
+    inherit: r08              #       ズレがあれば世代別エントリに分割して verified: true にする
+
+# 世代間差分で比較するフィールド(key名)。両世代に存在するもののみ比較される
+tracked_fields: [short_name, price_type, price, basic_name]

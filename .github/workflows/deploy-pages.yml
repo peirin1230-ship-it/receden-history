@@ -1,0 +1,60 @@
+# GitHub Pages 自動デプロイ
+#
+# 前提:
+#   - リポジトリ Settings → Pages → Build and deployment → Source = 「GitHub Actions」
+#   - data/raw/ に全件CSVがコミットされていること
+#     (生データをコミットしない運用の場合は docs/SITE_SPEC.md §6 の代替手順に従い、
+#      ローカル生成した _site/ をコミットして build ジョブを upload のみに置き換える)
+#   - M3(export-site 実装)完了までこのワークフローは失敗する。
+#     そのため push トリガーはコメントアウトしてあり、M4 でコメントを外して有効化する
+#   - `receden` コマンド名・手順は実装に合わせて調整してよい
+
+name: deploy-pages
+
+on:
+  workflow_dispatch:
+  # M4(GitHub Pages 公開)で以下のコメントを外し、main への push で自動デプロイする
+  # push:
+  #   branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e .
+      - name: Validate raw files
+        run: receden validate
+      - name: Ingest
+        run: receden ingest
+      - name: Build history
+        run: receden build-history
+      - name: Export static site
+        run: receden export-site --out _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

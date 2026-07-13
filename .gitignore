@@ -1,0 +1,18 @@
+# 生成物
+data/db/*.sqlite
+exports/*
+!exports/.gitkeep
+_site/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# 生データを公開リポジトリに含めない場合は以下を有効化
+# (docs/DATA_SOURCES.md §7 参照)
+# data/raw/**/*.csv
+# data/raw/**/*.zip

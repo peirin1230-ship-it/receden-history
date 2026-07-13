@@ -1,0 +1,60 @@
+# 世代(スナップショット)定義 — 古い順に並べること(ツールはこの順序で差分をとる)
+# effective_date: その世代の点数表(本体)施行日 = 期間窓の開始日
+# 詳細は docs/DATA_SOURCES.md §2
+
+eras:
+  - id: h24
+    label: 平成24年度改定
+    effective_date: "2012-04-01"
+    archive_url: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/h24/
+    notes: ベースライン世代。これ以前の履歴は復元不能(baseline扱い)
+
+  - id: h26
+    label: 平成26年度改定
+    effective_date: "2014-04-01"
+    archive_url: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/h26/
+    notes: 消費税8%対応を含む
+
+  - id: h28
+    label: 平成28年度改定
+    effective_date: "2016-04-01"
+    archive_url: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/h28/
+
+  - id: h30
+    label: 平成30年度改定
+    effective_date: "2018-04-01"
+    archive_url: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/h30/
+
+  - id: r01
+    label: 令和元年消費税改定
+    effective_date: "2019-10-01"
+    archive_url: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/r01/
+    notes: 消費税10%引上げ対応の臨時改定。短い世代
+
+  - id: r02
+    label: 令和2年度改定
+    effective_date: "2020-04-01"
+    archive_url: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/r02/
+
+  - id: r04
+    label: 令和4年度改定
+    effective_date: "2022-04-01"
+    archive_url: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/r04/
+
+  - id: r06
+    label: 令和6年度改定
+    effective_date: "2024-06-01"
+    archive_url: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/r06/
+    notes: 本体改定の施行が6月1日に後ろ倒し(4月ではない)
+
+  - id: r08
+    label: 令和8年度改定(現行)
+    effective_date: "2026-06-01"   # 要確認: 4/1施行項目の可能性あり。改定分内容PDFで確認して確定
+    archive_url: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/
+    notes: 現行世代。全件ファイルは現行ページ(サブディレクトリなし)から取得
+
+# 各世代ページのファイル番号(URL組み立て用): kihonmasta_{page}.html
+pages:
+  S: "01"   # 医科診療行為
+  T: "05"   # 特定器材
+  C: "06"   # コメント

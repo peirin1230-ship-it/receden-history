@@ -1,0 +1,36 @@
+# 特定器材マスター(マスター種別 T)カラム定義
+# 出典: マスターファイル仕様説明書(令和8年版)ファイルレイアウト(2026-07-14確認)
+# 列番号は1始まり。詳細・注意点は docs/FILE_LAYOUTS.md §3, §5
+
+master: T
+code_length: 9
+
+layouts:
+  - id: r08
+    applies_to: [r08]
+    verified: true
+    total_columns: 38
+    columns:
+      1:  {key: change_kubun,     name: 変更区分}
+      2:  {key: master_kind,      name: マスター種別, expect: "T"}
+      3:  {key: code,             name: 特定器材コード, pattern: '^\d{9}$'}
+      5:  {key: short_name,       name: 漢字名称}
+      7:  {key: short_kana,       name: カナ名称}
+      8:  {key: unit_code,        name: 単位コード}
+      10: {key: unit_name,        name: 単位漢字名称}
+      11: {key: price_type,       name: 金額種別}
+      12: {key: price,            name: 新又は現金額}
+      24: {key: max_points,       name: 上限点数}
+      26: {key: pub_order,        name: 公表順序番号}
+      27: {key: succession_code,  name: 廃止・新設関連}   # 新旧コード対応。M5の系譜リンクに使用
+      28: {key: changed_at,       name: 変更年月日, pattern: '^(0|\d{8})$'}
+      29: {key: transition_at,    name: 経過措置年月日, pattern: '^(0|\d{8})$'}
+      30: {key: abolished_at,     name: 廃止年月日, pattern: '^(0|\d{8})$'}
+      37: {key: basic_name,       name: 基本漢字名称}
+
+  - id: legacy_default
+    applies_to: [h24, h26, h28, h30, r01, r02, r04, r06]
+    verified: false           # TODO: validateで確認して世代別エントリに分割
+    inherit: r08
+
+tracked_fields: [short_name, unit_code, price_type, price, basic_name]

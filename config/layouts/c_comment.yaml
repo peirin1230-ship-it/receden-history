@@ -1,0 +1,36 @@
+# コメントマスター(マスター種別 C)カラム定義
+# 出典: マスターファイル仕様説明書(令和8年版)ファイルレイアウト(2026-07-14確認)
+# 列番号は1始まり。詳細・注意点は docs/FILE_LAYOUTS.md §4, §5
+
+master: C
+code_length: 9
+
+layouts:
+  - id: r08
+    applies_to: [r08]
+    verified: true
+    total_columns: 30
+    columns:
+      1:  {key: change_kubun,   name: 変更区分}
+      2:  {key: master_kind,    name: マスター種別, expect: "C"}
+      3:  {key: kubun,          name: 区分, expect: "8"}
+      4:  {key: pattern,        name: パターン}
+      5:  {key: serial,         name: 一連番号}          # 前ゼロ省略に注意
+      7:  {key: short_name,     name: 漢字名称(コメント文)}
+      20: {key: sentakushiki,   name: 選択式コメント識別}
+      21: {key: changed_at,     name: 変更年月日, pattern: '^(0|\d{8})$'}
+      22: {key: abolished_at,   name: 廃止年月日, pattern: '^(0|\d{8})$'}
+      23: {key: code,           name: コメントコード, pattern: '^8\d{8}$'}
+      24: {key: pub_order,      name: 公表順序番号}
+
+  - id: legacy_default
+    applies_to: [h24, h26, h28, h30, r01, r02, r04, r06]
+    verified: false           # TODO: validateで確認して世代別エントリに分割
+    inherit: r08
+
+# 列23(コメントコード)が存在しない・空の世代では次式で導出する:
+#   code = "8" + str(パターン).zfill(2) + str(一連番号).zfill(6)
+# 列23が存在する場合は導出値との一致を validate で確認すること
+code_derivation: '"8" + pattern.zfill(2) + serial.zfill(6)'
+
+tracked_fields: [short_name, sentakushiki]
