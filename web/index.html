@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>レセ電コード変更履歴</title>
+  <meta name="description" content="診療報酬のレセ電コード(医科診療行為・特定器材・コメント)の新設・変更・廃止の履歴を検索できる非公式ツール">
+  <!-- アセット参照は必ず相対パス(GitHub Pages は /{repo}/ 配下で配信されるため) -->
+  <!-- favicon は data URI(favicon.ico への 404 リクエストを防ぐ) -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%230b6bcb'/%3E%3Ctext x='50' y='72' font-size='60' text-anchor='middle' fill='white' font-family='sans-serif'%3E歴%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./assets/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1><a href="#/">レセ電コード変更履歴</a></h1>
+    <p class="subtitle">医科診療行為・特定器材・コメントマスターの新設・変更・廃止を世代横断で検索(非公式)</p>
+  </header>
+
+  <main id="app">
+    <p class="loading">読み込み中…</p>
+  </main>
+
+  <footer class="site-footer">
+    <div id="footer-disclaimer"></div>
+    <p>
+      データ出典: 社会保険診療報酬支払基金「基本マスター」(各改定世代の全件ファイル)を加工して作成。
+      <span id="footer-generated"></span>
+    </p>
+  </footer>
+
+  <script type="module" src="./assets/app.js"></script>
+</body>
+</html>
