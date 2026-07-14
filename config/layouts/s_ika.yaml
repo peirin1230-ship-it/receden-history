@@ -1,14 +1,19 @@
 # 医科診療行為マスター(マスター種別 S)カラム定義
-# 出典: マスターファイル仕様説明書(令和8年版)ファイルレイアウト(2026-07-14確認)
-# 列番号は1始まり。詳細・注意点は docs/FILE_LAYOUTS.md §2, §5
+# 出典:
+#   - v150: マスターファイル仕様説明書(令和8年版)ファイルレイアウト(2026-07-14確認)
+#   - v122: 実データの列プローブで確認(2026-07-14)。詳細は docs/FILE_LAYOUTS.md §5
+#     h24〜r01 の全件ファイルは122列だが、列1〜113は v150 と同位置
+#     (コード=3, 名称=5, 点数=12, 変更年月日=87, 廃止年月日=88, 基本名称=113 を実測で確認)。
+#     列114〜122はすべて 0/空 で、点数表区分番号(v150の列117)は存在しない。
+# 列番号は1始まり。
 
 master: S
 code_length: 9
 
 layouts:
-  - id: r08
-    applies_to: [r08]
-    verified: true            # 一次資料(令和8年版仕様説明書)で確認済み
+  - id: v150
+    applies_to: [r02, r04, r06, r08]
+    verified: true            # 一次資料(令和8年版仕様説明書)+ 実測プローブで確認済み
     total_columns: 150
     columns:
       1:   {key: change_kubun,    name: 変更区分}
@@ -25,10 +30,12 @@ layouts:
       113: {key: basic_name,      name: 基本漢字名称}
       117: {key: tensuhyo_kubun,  name: 点数表区分番号}
 
-  - id: legacy_default
-    applies_to: [h24, h26, h28, h30, r01, r02, r04, r06]
-    verified: false           # TODO: validateの列プローブで世代ごとに確認し、
-    inherit: r08              #       ズレがあれば世代別エントリに分割して verified: true にする
+  - id: v122
+    applies_to: [h24, h26, h28, h30, r01]
+    verified: true            # 実測プローブで確認済み(列位置は v150 の 1〜113 と同一)
+    inherit: v150
+    total_columns: 122
+    drop_columns: [117]       # 点数表区分番号は122列レイアウトに存在しない(列114〜122は全て0/空)
 
 # 世代間差分で比較するフィールド(key名)。両世代に存在するもののみ比較される
 tracked_fields: [short_name, price_type, price, basic_name]

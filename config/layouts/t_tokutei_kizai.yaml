@@ -1,13 +1,19 @@
 # 特定器材マスター(マスター種別 T)カラム定義
-# 出典: マスターファイル仕様説明書(令和8年版)ファイルレイアウト(2026-07-14確認)
-# 列番号は1始まり。詳細・注意点は docs/FILE_LAYOUTS.md §3, §5
+# 出典:
+#   - v38: マスターファイル仕様説明書(令和8年版)ファイルレイアウト(2026-07-14確認)
+#   - v37: 実データの列プローブで確認(2026-07-14)。h24〜r04 は37列で、
+#     v38 から末尾の列38(再製造単回使用医療機器)を除いただけ
+#     (コード=3, 名称=5, 金額=12, 変更年月日=28, 経過措置=29, 廃止年月日=30, 基本名称=37 を実測で確認)。
+# 実データ上の注意: 廃止年月日(列30)は 99999999(未設定)が大半で、廃止済み器材の
+# 実際の使用期限は経過措置年月日(列29)に入ることが多い(abolished の日付判定で両方を考慮する)。
+# 列番号は1始まり。
 
 master: T
 code_length: 9
 
 layouts:
-  - id: r08
-    applies_to: [r08]
+  - id: v38
+    applies_to: [r06, r08]
     verified: true
     total_columns: 38
     columns:
@@ -27,10 +33,13 @@ layouts:
       29: {key: transition_at,    name: 経過措置年月日, pattern: '^(0|\d{8})$'}
       30: {key: abolished_at,     name: 廃止年月日, pattern: '^(0|\d{8})$'}
       37: {key: basic_name,       name: 基本漢字名称}
+      38: {key: remanufactured,   name: 再製造単回使用医療機器}
 
-  - id: legacy_default
-    applies_to: [h24, h26, h28, h30, r01, r02, r04, r06]
-    verified: false           # TODO: validateで確認して世代別エントリに分割
-    inherit: r08
+  - id: v37
+    applies_to: [h24, h26, h28, h30, r01, r02, r04]
+    verified: true            # 実測プローブで確認済み(列1〜37は v38 と同一)
+    inherit: v38
+    total_columns: 37
+    drop_columns: [38]        # 再製造単回使用医療機器は37列レイアウトに存在しない
 
 tracked_fields: [short_name, unit_code, price_type, price, basic_name]

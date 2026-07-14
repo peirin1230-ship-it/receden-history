@@ -1,13 +1,19 @@
 # コメントマスター(マスター種別 C)カラム定義
-# 出典: マスターファイル仕様説明書(令和8年版)ファイルレイアウト(2026-07-14確認)
-# 列番号は1始まり。詳細・注意点は docs/FILE_LAYOUTS.md §4, §5
+# 出典:
+#   - v30: マスターファイル仕様説明書(令和8年版)ファイルレイアウト(2026-07-14確認)
+#   - v19: 実データの列プローブで確認(2026-07-14)。h24〜h28 は19列で、
+#     列1〜17は v30 と同位置、列18=変更年月日・列19=廃止年月日(実データでは全行 0=未設定)。
+#     選択式コメント識別(20)・コメントコード(23)・公表順序番号(24)は存在しない。
+# 実データ上の注意: 列23(コメントコード)は h30・r01 では空(導出式で補完する)。
+# r02 以降は全行埋まっており、導出値との一致を実測で確認済み(100%一致)。
+# 列番号は1始まり。
 
 master: C
 code_length: 9
 
 layouts:
-  - id: r08
-    applies_to: [r08]
+  - id: v30
+    applies_to: [h30, r01, r02, r04, r06, r08]
     verified: true
     total_columns: 30
     columns:
@@ -17,16 +23,27 @@ layouts:
       4:  {key: pattern,        name: パターン}
       5:  {key: serial,         name: 一連番号}          # 前ゼロ省略に注意
       7:  {key: short_name,     name: 漢字名称(コメント文)}
+      9:  {key: short_kana,     name: カナ名称}
       20: {key: sentakushiki,   name: 選択式コメント識別}
       21: {key: changed_at,     name: 変更年月日, pattern: '^(0|\d{8})$'}
       22: {key: abolished_at,   name: 廃止年月日, pattern: '^(0|\d{8})$'}
-      23: {key: code,           name: コメントコード, pattern: '^8\d{8}$'}
+      23: {key: code,           name: コメントコード, pattern: '^(|8\d{8})$'}   # h30/r01は空
       24: {key: pub_order,      name: 公表順序番号}
 
-  - id: legacy_default
-    applies_to: [h24, h26, h28, h30, r01, r02, r04, r06]
-    verified: false           # TODO: validateで確認して世代別エントリに分割
-    inherit: r08
+  - id: v19
+    applies_to: [h24, h26, h28]
+    verified: true            # 実測プローブで確認済み(列1〜17は v30 と同一、18/19が日付)
+    total_columns: 19
+    columns:
+      1:  {key: change_kubun,   name: 変更区分}
+      2:  {key: master_kind,    name: マスター種別, expect: "C"}
+      3:  {key: kubun,          name: 区分, expect: "8"}
+      4:  {key: pattern,        name: パターン}
+      5:  {key: serial,         name: 一連番号}
+      7:  {key: short_name,     name: 漢字名称(コメント文)}
+      9:  {key: short_kana,     name: カナ名称}
+      18: {key: changed_at,     name: 変更年月日, pattern: '^(0|\d{8})$'}
+      19: {key: abolished_at,   name: 廃止年月日, pattern: '^(0|\d{8})$'}
 
 # 列23(コメントコード)が存在しない・空の世代では次式で導出する:
 #   code = "8" + str(パターン).zfill(2) + str(一連番号).zfill(6)
