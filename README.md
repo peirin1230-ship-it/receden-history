@@ -50,7 +50,7 @@
 - [x] M1: 取込と検証(validate / ingest)
 - [x] M2: 履歴構築(build-history / show)
 - [x] M3: 静的サイト生成(export-site / web フロントエンド)
-- [ ] M4: GitHub Pages 公開
+- [x] M4: GitHub Pages 公開(main への push で自動デプロイ)
 - [ ] M5: 任意拡張(改定分取込・系譜リンク・CSV出力・CI)
   ※ `export`(events.csv / summary.md)のみ先行実装済み
 
