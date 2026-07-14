@@ -15,6 +15,7 @@ import re
 import sqlite3
 import sys
 from collections import Counter
+from datetime import date
 from pathlib import Path
 
 from .config import MASTERS, EraSet, Project, load_eras
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS snapshots(
   file_sha256  TEXT NOT NULL,
   column_count INTEGER,
   row_count    INTEGER,
+  ingested_at  TEXT,           -- 取込日 YYYYMMDD(最終世代の期間窓の上限 §6.1)
   UNIQUE(era, master)
 );
 
@@ -98,6 +100,10 @@ def connect(project: Project) -> sqlite3.Connection:
     project.db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(project.db_path)
     conn.executescript(SCHEMA)
+    # 旧スキーマのDBへの後方互換(列がなければ追加)
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(snapshots)")}
+    if "ingested_at" not in cols:
+        conn.execute("ALTER TABLE snapshots ADD COLUMN ingested_at TEXT")
     return conn
 
 
@@ -147,34 +153,54 @@ def iter_rows_with_raw(f):
 
 
 def detect_master(path: Path) -> str | None:
-    """先頭行の2列目でマスター種別を判定。対象外(S/T/C以外)は None。"""
-    try:
-        with open(path, encoding=ENCODING, newline="") as f:
-            row = next(csv.reader(f), None)
-    except UnicodeDecodeError:
-        return None
+    """先頭行の2列目でマスター種別を判定。対象外(S/T/C以外)は None。
+
+    先頭行が cp932 でデコードできない場合は UnicodeDecodeError を送出する
+    (握りつぶすと誤エンコーディングのファイルが黙って無視されてしまうため)。
+    """
+    with open(path, encoding=ENCODING, newline="") as f:
+        row = next(csv.reader(f), None)
     if row and len(row) >= 2 and row[1] in MASTERS:
         return row[1]
     return None
 
 
-def find_era_files(project: Project, era_id: str) -> dict[str, Path]:
-    """世代ディレクトリの CSV をマスター種別ごとに対応付ける。"""
+def scan_era_files(project: Project, era_id: str) -> tuple[dict[str, Path], list[tuple[Path, str]]]:
+    """世代ディレクトリの CSV をマスター種別ごとに対応付ける。
+
+    戻り値: (マスター → ファイル, 問題のあるファイルのリスト[(path, 理由)])。
+    S/T/C 以外のマスター(医薬品等)のCSVは対象外として黙って無視する。
+    """
     era_dir = project.raw_dir / era_id
     found: dict[str, Path] = {}
+    problems: list[tuple[Path, str]] = []
     if not era_dir.is_dir():
-        return found
+        return found, problems
     for path in sorted(era_dir.iterdir()):
         if path.suffix.lower() != ".csv" or not path.is_file():
             continue
-        master = detect_master(path)
+        try:
+            master = detect_master(path)
+        except UnicodeDecodeError as e:
+            problems.append((path, f"先頭行が cp932 でデコードできません(エンコーディング違いの疑い): {e}"))
+            continue
         if master is None:
             continue
         if master in found:
-            raise IngestError(
-                f"{era_dir}: マスター {master} のファイルが複数あります: {found[master].name}, {path.name}"
+            problems.append(
+                (path, f"マスター {master} のファイルが複数あります({found[master].name} を先に検出)")
             )
+            continue
         found[master] = path
+    return found, problems
+
+
+def find_era_files(project: Project, era_id: str) -> dict[str, Path]:
+    """scan_era_files の厳格版(取込用)。問題のあるファイルがあれば停止する。"""
+    found, problems = scan_era_files(project, era_id)
+    if problems:
+        details = "; ".join(f"{p.name}: {reason}" for p, reason in problems)
+        raise IngestError(f"data/raw/{era_id}: {details}")
     return found
 
 
@@ -265,9 +291,9 @@ def ingest_file(
             conn.execute("DELETE FROM records WHERE snapshot_id=?", (existing[0],))
             conn.execute("DELETE FROM snapshots WHERE id=?", (existing[0],))
         cur = conn.execute(
-            "INSERT INTO snapshots(era, master, file_name, file_sha256, column_count, row_count)"
-            " VALUES (?,?,?,?,?,?)",
-            (era_id, master, path.name, sha, mode_cols, len(records)),
+            "INSERT INTO snapshots(era, master, file_name, file_sha256, column_count, row_count,"
+            " ingested_at) VALUES (?,?,?,?,?,?,?)",
+            (era_id, master, path.name, sha, mode_cols, len(records), date.today().strftime("%Y%m%d")),
         )
         snapshot_id = cur.lastrowid
         conn.executemany(

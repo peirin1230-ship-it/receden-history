@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .config import MASTERS, Project, load_eras
-from .ingest import ENCODING, find_era_files
+from .ingest import ENCODING, scan_era_files
 from .layouts import derive_comment_code, load_master_layouts
 
 RATE_THRESHOLD = 0.99
@@ -196,10 +196,12 @@ def run_validate(project: Project, *, era: str | None = None, master: str | None
     eras = load_eras(project)
     reports: list[FileReport] = []
     missing: list[str] = []
+    problems: list[str] = []
     for e in eras:
         if era and e.id != era:
             continue
-        files = find_era_files(project, e.id)
+        files, era_problems = scan_era_files(project, e.id)
+        problems.extend(f"{e.id}/{p.name}: {reason}" for p, reason in era_problems)
         for m in MASTERS:
             if master and m != master:
                 continue
@@ -208,7 +210,9 @@ def run_validate(project: Project, *, era: str | None = None, master: str | None
                 continue
             reports.append(validate_file(project, e.id, m, files[m]))
 
-    ok = True
+    ok = not problems
+    for p in problems:
+        log(f"[ERROR] ファイル走査: {p}")
     for rep in reports:
         status = "NG" if rep.has_error else "OK"
         log(f"\n=== [{status}] {rep.era}/{rep.master} {rep.path.name} ({rep.row_count}行) ===")

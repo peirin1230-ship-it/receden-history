@@ -19,17 +19,20 @@ def repo_project() -> Project:
 
 def test_s_layout_resolution(repo_project):
     ml = load_master_layouts(repo_project, "S")
-    v122 = ml.for_era("h24")
+    v122_early = ml.for_era("h24")  # h24/h26: 点数表区分番号なし
+    v122 = ml.for_era("h28")  # h28/h30/r01: 点数表区分番号あり(実測)
     v150 = ml.for_era("r08")
+    assert v122_early.total_columns == 122
     assert v122.total_columns == 122
     assert v150.total_columns == 150
-    assert v122.verified and v150.verified
-    # inherit + drop_columns: v122 は点数表区分番号を持たない
+    assert v122_early.verified and v122.verified and v150.verified
+    # inherit + drop_columns: h24/h26 のみ点数表区分番号を持たない
     assert "tensuhyo_kubun" in v150.keys()
-    assert "tensuhyo_kubun" not in v122.keys()
+    assert "tensuhyo_kubun" in v122.keys()
+    assert "tensuhyo_kubun" not in v122_early.keys()
     # 主要列は同位置
     for key in ["code", "short_name", "price", "changed_at", "abolished_at", "basic_name"]:
-        assert v122.specs_by_key()[key].col == v150.specs_by_key()[key].col
+        assert v122_early.specs_by_key()[key].col == v150.specs_by_key()[key].col
 
 
 def test_t_layout_resolution(repo_project):
@@ -65,10 +68,13 @@ def test_unknown_era_raises(repo_project):
 def test_compare_keys_cross_layout(repo_project):
     """両世代のレイアウトに共通するフィールドのみ比較する(REQUIREMENTS §6.3)。"""
     ml = load_master_layouts(repo_project, "S")
-    keys = compare_keys(ml.for_era("r01"), ml.for_era("r02"))
-    assert "tensuhyo_kubun" not in keys  # r01(v122)側に存在しない
+    keys = compare_keys(ml.for_era("h26"), ml.for_era("h28"))
+    assert "tensuhyo_kubun" not in keys  # h26(v122_early)側に存在しない
     assert "price" in keys and "short_name" in keys and "basic_name" in keys
     assert not (keys & NON_COMPARED_KEYS)
+    # h28以降は両世代に存在するため比較対象になる
+    keys2 = compare_keys(ml.for_era("r01"), ml.for_era("r02"))
+    assert "tensuhyo_kubun" in keys2
 
     mlc = load_master_layouts(repo_project, "C")
     keys_c = compare_keys(mlc.for_era("h28"), mlc.for_era("h30"))

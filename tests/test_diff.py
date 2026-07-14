@@ -148,6 +148,39 @@ def test_new_and_abolished(project3):
         conn.close()
 
 
+def test_final_era_window_capped_at_ingest_date(project3):
+    """最終世代の期間窓は [施行日, 取込日](§6.1)。
+
+    事前告知された未来の変更年月日(例: 2027-06-01 施行の改定日)を持つ新設コードは
+    exact ではなく era_boundary(施行日)になること(実データ r08 で観察されたケース)。
+    """
+    write_csv(project3, "h24", "S", [s_row("111000110", ncols=122)])
+    write_csv(project3, "h26", "S", [s_row("111000110", ncols=122)])
+    write_csv(
+        project3,
+        "r06",
+        "S",
+        [
+            s_row("111000110", ncols=150),
+            # 取込日(今日)より未来の変更年月日を持つ新設コード
+            s_row("600000010", name="未来日付の新設", changed="20991231", ncols=150),
+            # 窓内(過去)の変更年月日を持つ新設コード
+            s_row("600000020", name="窓内の新設", changed="20240701", ncols=150),
+        ],
+    )
+    conn = _build(project3)
+    try:
+        evs = _events(conn, "S", "600000010")
+        assert evs[0]["type"] == "new"
+        assert evs[0]["precision"] == "era_boundary"
+        assert evs[0]["date"] == "2024-06-01"  # 施行日で代用(2099-12-31 にしない)
+
+        evs = _events(conn, "S", "600000020")
+        assert evs[0]["precision"] == "exact" and evs[0]["date"] == "2024-07-01"
+    finally:
+        conn.close()
+
+
 def test_t_abolished_uses_transition_date(project3):
     """特定器材は経過措置年月日を使用期限として考慮する(§6.5)。"""
     write_csv(

@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 from .config import MASTERS, EraSet, Project, load_eras
 from .ingest import connect
@@ -80,10 +81,22 @@ def load_snapshot_records(conn: sqlite3.Connection, snapshot_id: int) -> dict[st
     return out
 
 
-def _snapshot_sequence(conn: sqlite3.Connection, master: str, eras: EraSet) -> list[tuple[str, int]]:
-    """取込済みスナップショットを eras.yaml の順序で返す [(era_id, snapshot_id), ...]。"""
-    rows = dict(conn.execute("SELECT era, id FROM snapshots WHERE master=?", (master,)).fetchall())
-    return [(e.id, rows[e.id]) for e in eras if e.id in rows]
+def _snapshot_sequence(
+    conn: sqlite3.Connection, master: str, eras: EraSet
+) -> list[tuple[str, int, str | None]]:
+    """取込済みスナップショットを eras.yaml の順序で返す [(era_id, snapshot_id, ingested_at), ...]。"""
+    rows = {
+        era: (sid, ing)
+        for era, sid, ing in conn.execute(
+            "SELECT era, id, ingested_at FROM snapshots WHERE master=?", (master,)
+        )
+    }
+    return [(e.id, rows[e.id][0], rows[e.id][1]) for e in eras if e.id in rows]
+
+
+def _day_after(yyyymmdd: str) -> str:
+    d = datetime.strptime(yyyymmdd, "%Y%m%d") + timedelta(days=1)
+    return d.strftime("%Y%m%d")
 
 
 def _event_date_for_arrival(
@@ -130,7 +143,7 @@ def build_events_for_master(
     ml = load_master_layouts(project, master)
     events: list[Event] = []
 
-    first_era_id, first_snap_id = seq[0]
+    first_era_id, first_snap_id, _first_ing = seq[0]
     cur_records = load_snapshot_records(conn, first_snap_id)
 
     # baseline: 最古世代に存在 → 収載日は不明(REQUIREMENTS §6.4)
@@ -152,11 +165,15 @@ def build_events_for_master(
 
     ever_seen: set[str] = set()
     cur_era_id = first_era_id
-    for nxt_era_id, nxt_snap_id in seq[1:]:
+    for nxt_era_id, nxt_snap_id, nxt_ingested_at in seq[1:]:
         nxt_records = load_snapshot_records(conn, nxt_snap_id)
         ever_seen |= set(cur_records)
 
         era_start, era_end = eras.window(nxt_era_id)
+        if era_end is None and nxt_ingested_at:
+            # 最終世代の期間窓は [施行日, 取込日](§6.1)。取込日より未来の変更年月日
+            # (事前告知された改定日)を「窓内」と誤判定しないようにする
+            era_end = _day_after(nxt_ingested_at)
         boundary_iso = eras.by_id(nxt_era_id).effective_date
         keys = compare_keys(ml.for_era(cur_era_id), ml.for_era(nxt_era_id))
 

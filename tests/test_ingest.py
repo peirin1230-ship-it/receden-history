@@ -206,6 +206,15 @@ def test_ingest_force_replaces(project3):
     assert n == 1
 
 
+def test_ingest_stops_on_undecodable_file(project3):
+    """cp932 でデコードできないCSVを黙って無視せず、取込を停止する。"""
+    write_csv(project3, "h24", "S", [s_row("111000110", ncols=122)])
+    # UTF-16(BOM付き)は cp932 として1行目からデコード不能
+    (project3.raw_dir / "h24" / "s_utf16.csv").write_bytes("0,S,999999999,2,初診\r\n".encode("utf-16"))
+    with pytest.raises(IngestError, match="デコード"):
+        run_ingest(project3, log=lambda *a: None)
+
+
 def test_ingest_duplicate_code_stops(project3):
     """主キー重複は後勝ちにせず停止(REQUIREMENTS §12-9)。"""
     write_csv(

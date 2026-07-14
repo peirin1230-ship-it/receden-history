@@ -90,7 +90,7 @@ def s_row(
     r[86] = changed
     r[87] = abolished
     r[112] = basic if basic is not None else name
-    if ncols >= 150:
+    if ncols >= 117:
         r[116] = tensuhyo
     return r
 

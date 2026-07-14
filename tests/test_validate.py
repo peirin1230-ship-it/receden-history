@@ -78,3 +78,23 @@ def test_validate_decode_error(project3):
     path.write_bytes(line)
     rep = validate_file(project3, "h24", "S", path)
     assert any(f.check == "encoding" and f.level == "ERROR" for f in rep.findings)
+
+
+def test_validate_reports_undecodable_first_line(project3):
+    """1行目からデコード不能なファイル(UTF-16等)を黙って無視せず ERROR で報告する。"""
+    _fill_all(project3)
+    (project3.raw_dir / "h24" / "s_utf16.csv").write_bytes("0,S,111000110,2,初診\r\n".encode("utf-16"))
+    lines = []
+    assert run_validate(project3, log=lines.append) is False
+    assert any("ファイル走査" in line and "s_utf16.csv" in line and "デコード" in line for line in lines)
+
+
+def test_validate_reports_duplicate_master_files(project3):
+    """同一世代に同一マスターのCSVが複数あっても異常終了せず ERROR として報告する。"""
+    _fill_all(project3)
+    write_csv(project3, "h24", "S", [s_row("111000110", ncols=122)])  # s_test.csv
+    path2 = project3.raw_dir / "h24" / "s_test2.csv"
+    path2.write_bytes((project3.raw_dir / "h24" / "s_test.csv").read_bytes())
+    lines = []
+    assert run_validate(project3, log=lines.append) is False
+    assert any("ファイル走査" in line and "複数" in line for line in lines)
