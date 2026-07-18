@@ -9,7 +9,7 @@ import json
 from receden_history.config import load_eras
 from receden_history.diff import build_events_for_master, run_build_history
 from receden_history.ingest import connect, run_ingest
-from tests.conftest import c_row, s_row, t_row, write_csv
+from tests.conftest import c_row, make_project, s_row, t_row, write_csv, y_row
 
 
 def _build(project):
@@ -313,5 +313,84 @@ def test_events_only_for_ingested_masters(project3):
         assert evs == []
         evs = build_events_for_master(conn, project3, "S", eras)
         assert [e.event_type for e in evs] == ["baseline"]
+    finally:
+        conn.close()
+
+
+def test_yakka_era_masters_y_only(tmp_path):
+    """薬価改定世代(masters: [Y])とマスター別施行日(effective_date_overrides)。
+
+    - r07 は Y の期間窓のみを分割し、S/T/C の期間窓に影響しない
+    - r06/r08 の Y は薬価改定日(4/1)が施行日になり、本体施行日(6/1)は使われない
+    """
+    project = make_project(
+        tmp_path,
+        ["r04", "r06", "r07", "r08"],
+        masters={"r07": ["Y"]},
+        overrides={"r06": {"Y": "2024-04-01"}, "r08": {"Y": "2026-04-01"}},
+    )
+
+    # S: r04 → r06 → r08(r07 のスナップショットは存在しない)
+    write_csv(project, "r04", "S", [s_row("111000110", name="初診", price="288.00", ncols=150)])
+    write_csv(
+        project,
+        "r06",
+        "S",
+        [
+            s_row("111000110", name="初診", price="291.00", changed="20240601", ncols=150),
+            # r06 期間中(かつ r07 施行日 2025-04-01 以降)の新設。
+            # r07 が S の期間窓を分断すると era_boundary に化けるリグレッションを検知する
+            s_row("222000220", name="新行為", changed="20250601", ncols=150),
+        ],
+    )
+    write_csv(
+        project,
+        "r08",
+        "S",
+        [
+            s_row("111000110", name="初診", price="291.00", changed="20240601", ncols=150),
+            s_row("222000220", name="新行為", changed="20250601", ncols=150),
+        ],
+    )
+
+    # Y: 4世代すべてに在籍し、毎年の薬価改定で金額が変わる
+    write_csv(project, "r04", "Y", [y_row("610000001", price="10.00", changed="20220401", ncols=35)])
+    write_csv(
+        project,
+        "r06",
+        "Y",
+        [
+            # 薬価改定日ちょうどの変更。Y の r06 窓は override により [2024-04-01, 2025-04-01)
+            y_row("610000001", price="9.00", changed="20240401", ncols=42),
+            y_row("620000002", name="経過措置薬", transition="20250331", kubun="9", ncols=42),
+        ],
+    )
+    write_csv(project, "r07", "Y", [y_row("610000001", price="8.00", changed="20250401", ncols=42)])
+    write_csv(project, "r08", "Y", [y_row("610000001", price="7.00", changed="20260401", ncols=42)])
+
+    conn = _build(project)
+    try:
+        # S の新設: r06 の期間窓は [2024-06-01, 2026-06-01)(r07 で分断されない)→ exact
+        new = [e for e in _events(conn, "S", "222000220") if e["type"] == "new"][0]
+        assert new["date"] == "2025-06-01" and new["precision"] == "exact"
+        assert (new["from_era"], new["to_era"]) == ("r04", "r06")
+
+        # Y の変更: 毎年の薬価改定がすべて exact 日付で復元される
+        # (r06/r08 は effective_date_overrides により窓が 4/1 開始になるため)
+        evs = _events(conn, "Y", "610000001")
+        assert [e["type"] for e in evs] == ["baseline", "changed", "changed", "changed"]
+        assert [(e["date"], e["precision"]) for e in evs[1:]] == [
+            ("2024-04-01", "exact"),  # r04→r06(令和6年度薬価改定)
+            ("2025-04-01", "exact"),  # r06→r07(令和7年度薬価改定)
+            ("2026-04-01", "exact"),  # r07→r08(令和8年度薬価改定)
+        ]
+        r07_change = evs[2]
+        assert (r07_change["from_era"], r07_change["to_era"]) == ("r06", "r07")
+        assert {"field": "price", "old": "9", "new": "8"} in r07_change["changes"]
+
+        # Y の廃止: 廃止年月日が未設定でも経過措置年月日(列34)を使用期限として使う(Tと同様)
+        abo = [e for e in _events(conn, "Y", "620000002") if e["type"] == "abolished"][0]
+        assert abo["date"] == "2025-03-31" and abo["precision"] == "exact"
+        assert (abo["from_era"], abo["to_era"]) == ("r06", "r07")
     finally:
         conn.close()

@@ -1,0 +1,53 @@
+# 医薬品マスター(マスター種別 Y)カラム定義
+# 出典:
+#   - v42 / v35: 実データの列プローブで確認(2026-07-18)。詳細は docs/FILE_LAYOUTS.md §6
+#     h24〜r04 の全件ファイルは35列、r06 以降は42列で、列1〜35は全世代で同位置
+#     (コード=3, 名称=5, 金額=12, 変更年月日=30, 廃止年月日=31, 薬価基準収載医薬品コード=32,
+#      経過措置年月日=34, 基本名称=35 を全10ファイルの実測で確認)。
+#     ※ 支払基金サイトが本環境から到達不能のため、仕様説明書PDFとの列名突合は未実施。
+#       列名は実データの値パターンから同定した(日付率100%・YJコード形式・【般】接頭辞等)。
+#   - 列36〜42はr06以降の追加分。実測で内容を特定できた 37(一般名コード形式)・
+#     38(【般】で始まる名称)のみマップし、その他(36/39〜42)は未同定のため対象外とする。
+# 実データ上の注意: 廃止年月日(列31)は 99999999(未設定)が大半で、廃止済み医薬品の
+# 実際の使用期限は経過措置年月日(列34)に入る(abolished の日付判定で両方を考慮する。Tと同様)。
+# 列番号は1始まり。
+
+master: Y
+code_length: 9
+
+layouts:
+  - id: v42
+    applies_to: [r06, r07, r08]
+    verified: true            # 実測プローブで確認済み(2026-07-18)
+    total_columns: 42
+    columns:
+      1:  {key: change_kubun,      name: 変更区分}
+      2:  {key: master_kind,       name: マスター種別, expect: "Y"}
+      3:  {key: code,              name: 医薬品コード, pattern: '^\d{9}$'}
+      5:  {key: short_name,        name: 医薬品名・規格名(漢字名称)}
+      7:  {key: short_kana,        name: カナ名称}
+      8:  {key: unit_code,         name: 単位コード}
+      10: {key: unit_name,         name: 単位漢字名称}
+      11: {key: price_type,        name: 金額種別}
+      12: {key: price,             name: 新又は現金額}
+      14: {key: narcotic_kubun,    name: 麻薬・毒薬・覚醒剤原料・向精神薬}
+      16: {key: biologic,          name: 生物学的製剤}
+      17: {key: generic,           name: 後発品}
+      28: {key: dosage_form,       name: 剤形}
+      30: {key: changed_at,        name: 変更年月日, pattern: '^(0|\d{8})$'}
+      31: {key: abolished_at,      name: 廃止年月日, pattern: '^(0|\d{8})$'}
+      32: {key: yj_code,           name: 薬価基準収載医薬品コード, pattern: '^(|[0-9A-Z]{12})$'}
+      33: {key: pub_order,         name: 公表順序番号}
+      34: {key: transition_at,     name: 経過措置年月日, pattern: '^(0|\d{8})$'}
+      35: {key: basic_name,        name: 基本漢字名称}
+      37: {key: generic_name_code, name: 一般名コード}
+      38: {key: generic_name,      name: 一般名処方の標準的な記載}
+
+  - id: v35
+    applies_to: [h24, h26, h28, h30, r01, r02, r04]
+    verified: true            # 実測プローブで確認済み(列1〜35は v42 と同一)
+    inherit: v42
+    total_columns: 35
+    drop_columns: [37, 38]    # 一般名処方関連は35列レイアウトに存在しない
+
+tracked_fields: [short_name, unit_code, price_type, price, generic, basic_name]

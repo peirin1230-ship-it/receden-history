@@ -5,16 +5,16 @@
 // - 検索インデックスはマスター初回検索時に遅延ロードしてメモリにキャッシュ
 // - 詳細表示は該当 shard の JSON のみ fetch
 
-const MASTER_LABELS = { S: "医科診療行為", T: "特定器材", C: "コメント" };
-const PRICE_UNIT = { S: "点", T: "円", C: "" };
+const MASTER_LABELS = { S: "医科診療行為", Y: "医薬品", T: "特定器材", C: "コメント" };
+const PRICE_UNIT = { S: "点", Y: "円", T: "円", C: "" };
 
 // フィールド名の表示ラベル(src/receden_history/report.py の FIELD_LABELS と対応)
 const FIELD_LABELS = {
   short_name: "名称",
   basic_name: "基本名称",
   short_kana: "カナ名称",
-  price: { S: "点数", T: "金額", C: "点数" },
-  price_type: { S: "点数識別", T: "金額種別", C: "点数識別" },
+  price: { S: "点数", T: "金額", C: "点数", Y: "金額(薬価)" },
+  price_type: { S: "点数識別", T: "金額種別", C: "点数識別", Y: "金額種別" },
   unit_code: "単位コード",
   unit_name: "単位名称",
   max_points: "上限点数",
@@ -22,6 +22,13 @@ const FIELD_LABELS = {
   sentakushiki: "選択式コメント識別",
   tensuhyo_kubun: "点数表区分番号",
   remanufactured: "再製造単回使用医療機器",
+  narcotic_kubun: "麻薬・毒薬・覚醒剤原料・向精神薬",
+  biologic: "生物学的製剤",
+  generic: "後発品",
+  dosage_form: "剤形",
+  yj_code: "薬価基準収載医薬品コード",
+  generic_name_code: "一般名コード",
+  generic_name: "一般名処方の標準的な記載",
 };
 
 const PRECISION_LABELS = {
@@ -114,7 +121,7 @@ function renderFooter() {
 
 function route() {
   const hash = decodeURIComponent(location.hash || "");
-  const m = hash.match(/^#\/([STC])\/(\d{9})$/);
+  const m = hash.match(/^#\/([SYTC])\/(\d{9})$/);
   if (m) {
     renderDetail(m[1], m[2]).catch((err) => {
       app.replaceChildren(errorBox(err.message));
@@ -147,10 +154,13 @@ async function renderHome() {
     timer = setTimeout(() => runSearch(resultsHost), 150);
   });
 
+  // meta.counts にデータがあるマスターだけタブを出す(データ未生成のタブで404にしない)
+  const masters = Object.keys(MASTER_LABELS).filter((m) => meta.counts?.[m]);
+  if (masters.length && !masters.includes(state.master)) state.master = masters[0];
   const tabs = el(
     "div",
     { class: "tabs" },
-    ["S", "T", "C"].map((m) =>
+    masters.map((m) =>
       el(
         "button",
         {
@@ -247,8 +257,10 @@ function summaryTable(meta) {
     .filter((e) => summary[e.id])
     .map((e) => {
       const c = summary[e.id];
+      // マスター別施行日(例: 薬価改定は4/1)があればそちらを表示
+      const date = e.effective_date_overrides?.[master] || e.effective_date;
       return el("tr", {}, [
-        el("td", {}, `${e.label}(${e.effective_date}〜)`),
+        el("td", {}, `${e.label}(${date}〜)`),
         el("td", { class: "num" }, String(c.new || 0)),
         el("td", { class: "num" }, String(c.changed || 0)),
         el("td", { class: "num" }, String(c.abolished || 0)),
@@ -260,7 +272,8 @@ function summaryTable(meta) {
       el("thead", {}, el("tr", {},
         ["世代", "新設", "変更", "廃止", "再出現"].map((h) => el("th", {}, h)))),
       el("tbody", {}, rows.length ? rows : [
-        el("tr", {}, el("td", { colspan: "5" }, "データ読み込み中…")),
+        el("tr", {}, el("td", { colspan: "5" },
+          state.summary ? "このマスターのイベントデータはありません" : "データ読み込み中…")),
       ]),
     ]),
   ]);

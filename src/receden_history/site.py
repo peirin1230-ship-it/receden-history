@@ -64,7 +64,7 @@ def _load_events(conn: sqlite3.Connection, master: str) -> list[dict]:
 def _baseline_fields_map(conn: sqlite3.Connection, eras: EraSet, master: str) -> dict[str, dict]:
     """最古世代スナップショットの code → {price, price_type}(baseline イベント用)。"""
     seq = dict(conn.execute("SELECT era, id FROM snapshots WHERE master=?", (master,)).fetchall())
-    ordered = [e.id for e in eras if e.id in seq]
+    ordered = [e.id for e in eras.for_master(master) if e.id in seq]
     if not ordered:
         return {}
     out = {}
@@ -170,7 +170,9 @@ def export_site(project: Project, out: Path, *, log=print) -> None:
                     shard: len(json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode())
                     for shard, data in shards.items()
                 }
-                if max(sizes.values()) <= SHARD_SIZE_LIMIT or width >= 4:
+                # 上限6桁: 医薬品(Y)はコードが 62000 台(統一名収載)に極端に集中し、
+                # 5桁まででは1shardが数MBのまま割れない(6桁で全shardが上限内に収まる)
+                if max(sizes.values()) <= SHARD_SIZE_LIMIT or width >= 6:
                     break
                 log(
                     f"  history/{master}: shard {max(sizes, key=sizes.get)} が "
@@ -194,6 +196,12 @@ def export_site(project: Project, out: Path, *, log=print) -> None:
                     "id": e.id,
                     "label": e.label,
                     "effective_date": e.effective_date,
+                    # マスター別施行日(例: 薬価改定は4/1)。サマリ表の期間表示に使う
+                    **(
+                        {"effective_date_overrides": dict(e.effective_date_overrides)}
+                        if e.effective_date_overrides
+                        else {}
+                    ),
                     "files": files_by_era.get(e.id, {}),
                 }
                 for e in eras

@@ -16,8 +16,8 @@ FIELD_LABELS: dict[str, str | dict[str, str]] = {
     "short_name": "名称",
     "basic_name": "基本名称",
     "short_kana": "カナ名称",
-    "price": {"S": "点数", "T": "金額", "C": "点数"},
-    "price_type": {"S": "点数識別", "T": "金額種別", "C": "点数識別"},
+    "price": {"S": "点数", "T": "金額", "C": "点数", "Y": "金額(薬価)"},
+    "price_type": {"S": "点数識別", "T": "金額種別", "C": "点数識別", "Y": "金額種別"},
     "unit_code": "単位コード",
     "unit_name": "単位名称",
     "max_points": "上限点数",
@@ -25,9 +25,16 @@ FIELD_LABELS: dict[str, str | dict[str, str]] = {
     "sentakushiki": "選択式コメント識別",
     "tensuhyo_kubun": "点数表区分番号",
     "remanufactured": "再製造単回使用医療機器",
+    "narcotic_kubun": "麻薬・毒薬・覚醒剤原料・向精神薬",
+    "biologic": "生物学的製剤",
+    "generic": "後発品",
+    "dosage_form": "剤形",
+    "yj_code": "薬価基準収載医薬品コード",
+    "generic_name_code": "一般名コード",
+    "generic_name": "一般名処方の標準的な記載",
 }
 
-PRICE_UNIT = {"S": "点", "T": "円", "C": ""}
+PRICE_UNIT = {"S": "点", "T": "円", "C": "", "Y": "円"}
 
 PRECISION_LEGEND = {
     "exact": "マスター記載の年月日",
@@ -62,6 +69,7 @@ def latest_states(conn: sqlite3.Connection, eras: EraSet, master: str) -> dict[s
     - abolished_date: abolished イベントの日付。active でも廃止予定日(廃止年月日・
       経過措置年月日)がマスターに記載されていればその日付を入れる(変更区分9=廃止予定の扱い、§6.4)
     """
+    eras = eras.for_master(master)
     seq = conn.execute("SELECT era, id FROM snapshots WHERE master=?", (master,)).fetchall()
     by_era = dict(seq)
     ordered = [(e.id, by_era[e.id]) for e in eras if e.id in by_era]
@@ -129,7 +137,7 @@ def _fetch_events(conn: sqlite3.Connection, master: str, code: str) -> list[dict
 def _baseline_snapshot_fields(conn: sqlite3.Connection, eras: EraSet, master: str, code: str) -> dict | None:
     """baseline イベントに添える、最古世代時点の主要フィールド(SITE_SPEC §3)。"""
     seq = dict(conn.execute("SELECT era, id FROM snapshots WHERE master=?", (master,)).fetchall())
-    ordered = [e.id for e in eras if e.id in seq]
+    ordered = [e.id for e in eras.for_master(master) if e.id in seq]
     if not ordered:
         return None
     row = conn.execute(

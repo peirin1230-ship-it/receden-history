@@ -137,6 +137,8 @@ def _diff_fields(
 def build_events_for_master(
     conn: sqlite3.Connection, project: Project, master: str, eras: EraSet
 ) -> list[Event]:
+    # 期間窓・世代境界がずれないよう、他マスター専用の世代(薬価改定等)を除外する
+    eras = eras.for_master(master)
     seq = _snapshot_sequence(conn, master, eras)
     if not seq:
         return []

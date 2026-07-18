@@ -228,3 +228,63 @@ def test_ingest_duplicate_code_stops(project3):
     )
     with pytest.raises(IngestError, match="重複"):
         run_ingest(project3, log=lambda *a: None)
+
+
+def test_ingest_y_master(tmp_path):
+    """医薬品マスターの取込: キー列の正規化と extra_json への格納。"""
+    from tests.conftest import make_project, y_row
+
+    project = make_project(tmp_path, ["r06"])
+    write_csv(
+        project,
+        "r06",
+        "Y",
+        [
+            y_row(
+                "610000001",
+                name="テスト錠１０ｍｇ",
+                unit_code="16",
+                unit_name="錠",
+                price="10.10",
+                changed="20240601",
+                yj="1234567F1234",
+                generic="1",
+                generic_name="【般】テスト錠１０ｍｇ",
+                ncols=42,
+            ),
+        ],
+    )
+    run_ingest(project, log=lambda *a: None)
+    conn = connect(project)
+    try:
+        row = conn.execute(
+            "SELECT r.code, r.name, r.basic_name, r.price, r.changed_at, r.abolished_at, r.extra_json"
+            " FROM records r JOIN snapshots s ON s.id=r.snapshot_id"
+            " WHERE s.era='r06' AND s.master='Y'"
+        ).fetchone()
+        assert row[:6] == ("610000001", "テスト錠１０ｍｇ", "テスト錠１０ｍｇ", "10.1", "20240601", None)
+        extra = json.loads(row[6])
+        assert extra["unit_name"] == "錠"
+        assert extra["yj_code"] == "1234567F1234"
+        assert extra["generic"] == "1"
+        assert extra["generic_name"] == "【般】テスト錠１０ｍｇ"
+    finally:
+        conn.close()
+
+
+def test_ingest_skips_master_not_in_era(tmp_path):
+    """世代の対象外マスターのCSV(例: 薬価改定世代のS)は取り込まずスキップする。"""
+    from tests.conftest import make_project, y_row
+
+    project = make_project(tmp_path, ["r07"], masters={"r07": ["Y"]})
+    write_csv(project, "r07", "Y", [y_row("610000001", ncols=42)])
+    write_csv(project, "r07", "S", [s_row("111000110", ncols=150)])
+    logs = []
+    run_ingest(project, log=logs.append)
+    conn = connect(project)
+    try:
+        snaps = conn.execute("SELECT era, master FROM snapshots").fetchall()
+        assert snaps == [("r07", "Y")]
+    finally:
+        conn.close()
+    assert any("対象外" in line and "/S" in line for line in logs)

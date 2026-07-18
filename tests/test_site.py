@@ -144,3 +144,50 @@ def test_export_is_idempotent_data(project3, tmp_path):
     export_site(project3, out2, log=lambda *a: None)
     for rel in ["data/summary.json", "data/search/S.json", "data/history/S/111.json"]:
         assert (out1 / rel).read_bytes() == (out2 / rel).read_bytes()
+
+
+def test_export_site_includes_y_master(tmp_path):
+    """医薬品(Y)の検索インデックス・履歴shard・meta が生成される。"""
+    from tests.conftest import make_project, y_row
+
+    project = make_project(tmp_path, ["r06", "r07", "r08"], masters={"r07": ["Y"]})
+    shutil.copytree(REPO_ROOT / "web", project.root / "web")
+    write_csv(project, "r06", "Y", [y_row("610000001", name="テスト錠", price="10.00", ncols=42)])
+    write_csv(
+        project,
+        "r07",
+        "Y",
+        [y_row("610000001", name="テスト錠", price="9.00", changed="20250401", ncols=42)],
+    )
+    write_csv(
+        project,
+        "r08",
+        "Y",
+        [y_row("610000001", name="テスト錠", price="9.00", changed="20250401", ncols=42)],
+    )
+    write_csv(project, "r06", "S", [s_row("111000110", name="初診", ncols=150)])
+    write_csv(project, "r08", "S", [s_row("111000110", name="初診", ncols=150)])
+    run_ingest(project, log=lambda *a: None)
+    run_build_history(project, log=lambda *a: None)
+
+    out = tmp_path / "_site"
+    export_site(project, out, log=lambda *a: None)
+
+    search = json.loads((out / "data" / "search" / "Y.json").read_text(encoding="utf-8"))
+    items = {row[0]: row for row in search["items"]}
+    assert items["610000001"][1:] == ["テスト錠", "active", None]
+
+    shard = json.loads((out / "data" / "history" / "Y" / "610.json").read_text(encoding="utf-8"))
+    types = [e["type"] for e in shard["610000001"]["events"]]
+    assert types == ["baseline", "changed"]  # r06収載済 → r07で薬価改定(r08は変化なし)
+    assert shard["610000001"]["events"][1]["to_era"] == "r07"
+
+    meta = json.loads((out / "data" / "meta.json").read_text(encoding="utf-8"))
+    assert meta["counts"]["Y"]["codes"] == 1
+    assert [e["id"] for e in meta["eras"]] == ["r06", "r07", "r08"]
+    # r07 世代のファイル一覧には Y のみが載る
+    files_r07 = next(e["files"] for e in meta["eras"] if e["id"] == "r07")
+    assert list(files_r07.keys()) == ["Y"]
+
+    summary = json.loads((out / "data" / "summary.json").read_text(encoding="utf-8"))
+    assert summary["Y"]["r07"]["changed"] == 1

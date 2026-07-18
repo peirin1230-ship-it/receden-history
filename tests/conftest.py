@@ -27,25 +27,39 @@ ERA_DATES = {
     "r02": "2020-04-01",
     "r04": "2022-04-01",
     "r06": "2024-06-01",
+    "r07": "2025-04-01",
     "r08": "2026-06-01",
 }
 
 # 世代 → 各マスターの列数(実測。tests は実レイアウト定義に合わせる)
 NCOLS = {
-    "h24": {"S": 122, "T": 37, "C": 19},
-    "h26": {"S": 122, "T": 37, "C": 19},
-    "h28": {"S": 122, "T": 37, "C": 19},
-    "h30": {"S": 122, "T": 37, "C": 30},
-    "r01": {"S": 122, "T": 37, "C": 30},
-    "r02": {"S": 150, "T": 37, "C": 30},
-    "r04": {"S": 150, "T": 37, "C": 30},
-    "r06": {"S": 150, "T": 38, "C": 30},
-    "r08": {"S": 150, "T": 38, "C": 30},
+    "h24": {"S": 122, "T": 37, "C": 19, "Y": 35},
+    "h26": {"S": 122, "T": 37, "C": 19, "Y": 35},
+    "h28": {"S": 122, "T": 37, "C": 19, "Y": 35},
+    "h30": {"S": 122, "T": 37, "C": 30, "Y": 35},
+    "r01": {"S": 122, "T": 37, "C": 30, "Y": 35},
+    "r02": {"S": 150, "T": 37, "C": 30, "Y": 35},
+    "r04": {"S": 150, "T": 37, "C": 30, "Y": 35},
+    "r06": {"S": 150, "T": 38, "C": 30, "Y": 42},
+    "r07": {"Y": 42},
+    "r08": {"S": 150, "T": 38, "C": 30, "Y": 42},
 }
 
 
-def make_project(tmp_path: Path, era_ids: list[str]) -> Project:
-    """実 config/layouts をコピーし、指定世代のみの eras.yaml を書いたプロジェクトを作る。"""
+def make_project(
+    tmp_path: Path,
+    era_ids: list[str],
+    *,
+    masters: dict[str, list[str]] | None = None,
+    overrides: dict[str, dict[str, str]] | None = None,
+) -> Project:
+    """実 config/layouts をコピーし、指定世代のみの eras.yaml を書いたプロジェクトを作る。
+
+    masters: 世代id → 対象マスターのリスト(省略した世代は全マスター対象)。
+    例: masters={"r07": ["Y"]} で医薬品のみの薬価改定世代を作れる。
+    overrides: 世代id → {マスター: 施行日} の effective_date_overrides。
+    例: overrides={"r06": {"Y": "2024-04-01"}} で薬価改定日(4/1)を表現する。
+    """
     (tmp_path / "config").mkdir(exist_ok=True)
     shutil.copytree(REPO_ROOT / "config" / "layouts", tmp_path / "config" / "layouts", dirs_exist_ok=True)
     lines = ["eras:"]
@@ -55,6 +69,11 @@ def make_project(tmp_path: Path, era_ids: list[str]) -> Project:
             f"    label: {eid}世代",
             f'    effective_date: "{ERA_DATES[eid]}"',
         ]
+        if masters and eid in masters:
+            lines.append(f"    masters: [{', '.join(masters[eid])}]")
+        if overrides and eid in overrides:
+            lines.append("    effective_date_overrides:")
+            lines += [f'      {m}: "{d}"' for m, d in overrides[eid].items()]
     (tmp_path / "config" / "eras.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
     for eid in era_ids:
         (tmp_path / "data" / "raw" / eid).mkdir(parents=True)
@@ -125,6 +144,46 @@ def t_row(
     r[28] = transition
     r[29] = abolished
     r[36] = basic if basic is not None else name
+    return r
+
+
+def y_row(
+    code: str,
+    *,
+    name: str = "テスト薬",
+    kana: str = "ﾃｽﾄ",
+    unit_code: str = "16",
+    unit_name: str = "錠",
+    price: str = "10.00",
+    price_type: str = "1",
+    generic: str = "",
+    kubun: str = "0",
+    changed: str = "0",
+    abolished: str = "99999999",
+    transition: str = "0",
+    yj: str = "",
+    basic: str | None = None,
+    generic_name: str = "",
+    ncols: int = 42,
+) -> list[str]:
+    r = _base_row(ncols)
+    r[0] = kubun
+    r[1] = "Y"
+    r[2] = code
+    r[4] = name
+    r[6] = kana
+    r[7] = unit_code
+    r[9] = unit_name
+    r[10] = price_type
+    r[11] = price
+    r[16] = generic
+    r[29] = changed
+    r[30] = abolished
+    r[31] = yj
+    r[33] = transition
+    r[34] = basic if basic is not None else name
+    if ncols >= 42:
+        r[37] = generic_name
     return r
 
 

@@ -1,5 +1,10 @@
 # 世代(スナップショット)定義 — 古い順に並べること(ツールはこの順序で差分をとる)
 # effective_date: その世代の点数表(本体)施行日 = 期間窓の開始日
+# masters: その世代が対象とするマスター種別(省略時は全マスター S/Y/T/C)。
+#   医薬品のみの中間年改定(薬価改定)世代は masters: [Y] と限定する。
+#   期間窓はマスター別に「そのマスターが対象の世代」だけで計算される(config.EraSet.for_master)
+# effective_date_overrides: マスター別の施行日。本体(点数表)と施行日が異なる場合に使う
+#   (例: 令和6年度は本体 6/1 に対し薬価改定は 4/1)。期間窓・世代境界に反映される
 # 詳細は docs/DATA_SOURCES.md §2
 
 eras:
@@ -44,17 +49,29 @@ eras:
   - id: r06
     label: 令和6年度改定
     effective_date: "2024-06-01"
+    effective_date_overrides:
+      Y: "2024-04-01"   # 薬価改定は4/1施行(実データ: r06のY全件で変更年月日=20240401 が大半)
     archive_url: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/r06/
-    notes: 本体改定の施行が6月1日に後ろ倒し(4月ではない)
+    notes: 本体改定の施行が6月1日に後ろ倒し(4月ではない)。薬価改定は従来どおり4月1日
+
+  - id: r07
+    label: 令和7年度薬価改定
+    effective_date: "2025-04-01"
+    masters: [Y]
+    archive_url: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/r07/   # 要確認: 薬価改定アーカイブのURL
+    notes: 医薬品のみの中間年改定(薬価改定)。S/T/C はこの世代のスナップショットを持たない
 
   - id: r08
     label: 令和8年度改定(現行)
     effective_date: "2026-06-01"   # 要確認: 4/1施行項目の可能性あり。改定分内容PDFで確認して確定
+    effective_date_overrides:
+      Y: "2026-04-01"   # 薬価改定は4/1施行(実データ: r08のY全件で変更年月日=20260401 が大半)
     archive_url: https://www.ssk.or.jp/seikyushiharai/tensuhyo/kihonmasta/
     notes: 現行世代。全件ファイルは現行ページ(サブディレクトリなし)から取得
 
 # 各世代ページのファイル番号(URL組み立て用): kihonmasta_{page}.html
 pages:
   S: "01"   # 医科診療行為
+  Y: "04"   # 医薬品(要確認: サイト到達不能のため番号未検証)
   T: "05"   # 特定器材
   C: "06"   # コメント

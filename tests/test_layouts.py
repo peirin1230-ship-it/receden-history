@@ -59,6 +59,27 @@ def test_c_layout_resolution(repo_project):
     assert ml.has_code_derivation
 
 
+def test_y_layout_resolution(repo_project):
+    ml = load_master_layouts(repo_project, "Y")
+    v35 = ml.for_era("h24")
+    v42 = ml.for_era("r07")  # 薬価改定世代も v42 に解決される
+    assert v35.total_columns == 35
+    assert v42.total_columns == 42
+    assert v35.verified and v42.verified
+    # 一般名処方関連(37/38)は42列レイアウトのみ
+    assert "generic_name" in v42.keys() and "generic_name_code" in v42.keys()
+    assert "generic_name" not in v35.keys() and "generic_name_code" not in v35.keys()
+    # 主要列は全世代で同位置(実測プローブで確認)
+    for key in ["code", "short_name", "price", "changed_at", "abolished_at", "transition_at", "basic_name"]:
+        assert v35.specs_by_key()[key].col == v42.specs_by_key()[key].col
+    assert v42.specs_by_key()["changed_at"].col == 30
+    assert v42.specs_by_key()["abolished_at"].col == 31
+    assert v42.specs_by_key()["transition_at"].col == 34
+    assert v42.specs_by_key()["basic_name"].col == 35
+    assert ml.code_length == 9
+    assert not ml.has_code_derivation
+
+
 def test_unknown_era_raises(repo_project):
     ml = load_master_layouts(repo_project, "S")
     with pytest.raises(KeyError):

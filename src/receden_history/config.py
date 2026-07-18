@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
 
-MASTERS = ("S", "T", "C")
+MASTERS = ("S", "Y", "T", "C")
 
 # マスター種別 → レイアウト定義ファイル名
 LAYOUT_FILES = {
     "S": "s_ika.yaml",
+    "Y": "y_iyakuhin.yaml",
     "T": "t_tokutei_kizai.yaml",
     "C": "c_comment.yaml",
 }
@@ -19,17 +20,30 @@ LAYOUT_FILES = {
 
 @dataclass(frozen=True)
 class Era:
-    """世代(スナップショット)。eras.yaml の1エントリ。"""
+    """世代(スナップショット)。eras.yaml の1エントリ。
+
+    masters: この世代が対象とするマスター種別。既定は全マスター。
+    医薬品のみの中間年改定(薬価改定)世代は masters: [Y] のように限定する。
+    effective_date_overrides: マスター別の施行日。本体(点数表)と施行日が異なる
+    マスターに使う(例: 令和6年度は本体 6/1 に対し薬価改定は 4/1)。
+    for_master() がこの値で effective_date を差し替えるため、期間窓・世代境界は
+    自動的にマスター別の施行日で計算される。
+    """
 
     id: str
     label: str
     effective_date: str  # ISO形式 YYYY-MM-DD(期間窓の開始日)
     archive_url: str = ""
     notes: str = ""
+    masters: tuple[str, ...] = MASTERS
+    effective_date_overrides: tuple[tuple[str, str], ...] = ()  # ((master, ISO日付), ...)
 
     @property
     def effective_yyyymmdd(self) -> str:
         return self.effective_date.replace("-", "")
+
+    def effective_date_for(self, master: str) -> str:
+        return dict(self.effective_date_overrides).get(master, self.effective_date)
 
 
 @dataclass(frozen=True)
@@ -87,6 +101,23 @@ class EraSet:
     def index(self, era_id: str) -> int:
         return self.ids().index(era_id)
 
+    def for_master(self, master: str) -> EraSet:
+        """指定マスターが対象の世代のみに絞った EraSet を返す。
+
+        世代によって対象マスターが異なる(例: 薬価改定世代は医薬品のみ)ため、
+        期間窓・世代境界の計算は必ずマスター別に絞った EraSet で行うこと。
+        絞らないと、他マスター専用の世代が期間窓を分断してしまう。
+        あわせて effective_date をマスター別施行日(effective_date_overrides)に
+        差し替えるため、返り値の期間窓・世代境界はそのマスターの施行日基準になる。
+        """
+        return EraSet(
+            tuple(
+                replace(e, effective_date=e.effective_date_for(master))
+                for e in self.eras
+                if master in e.masters
+            )
+        )
+
     def window(self, era_id: str) -> tuple[str, str | None]:
         """世代の期間窓 [開始日, 終了日) を YYYYMMDD で返す。
 
@@ -104,6 +135,18 @@ def load_eras(project: Project) -> EraSet:
         data = yaml.safe_load(f)
     eras = []
     for entry in data["eras"]:
+        raw_masters = entry.get("masters")
+        masters = MASTERS if raw_masters is None else tuple(str(m) for m in raw_masters)
+        unknown = [m for m in masters if m not in MASTERS]
+        if unknown:
+            raise ValueError(f"eras.yaml: 世代 {entry['id']} の masters に不明なマスター種別 {unknown}")
+        raw_overrides = entry.get("effective_date_overrides") or {}
+        unknown = [m for m in raw_overrides if str(m) not in masters]
+        if unknown:
+            raise ValueError(
+                f"eras.yaml: 世代 {entry['id']} の effective_date_overrides に"
+                f"対象外のマスター種別 {unknown}"
+            )
         eras.append(
             Era(
                 id=str(entry["id"]),
@@ -111,11 +154,20 @@ def load_eras(project: Project) -> EraSet:
                 effective_date=str(entry["effective_date"]),
                 archive_url=str(entry.get("archive_url", "")),
                 notes=str(entry.get("notes", "")),
+                masters=masters,
+                effective_date_overrides=tuple((str(m), str(d)) for m, d in raw_overrides.items()),
             )
         )
     if not eras:
         raise ValueError("eras.yaml に世代が定義されていません")
+    era_set = EraSet(tuple(eras))
     dates = [e.effective_date for e in eras]
     if dates != sorted(dates):
         raise ValueError("eras.yaml の世代は施行日の古い順に並べてください")
-    return EraSet(tuple(eras))
+    for master in MASTERS:
+        dates = [e.effective_date for e in era_set.for_master(master)]
+        if dates != sorted(dates):
+            raise ValueError(
+                f"eras.yaml: マスター {master} の施行日列(overrides適用後)が古い順になっていません"
+            )
+    return era_set

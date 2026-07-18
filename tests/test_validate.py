@@ -98,3 +98,33 @@ def test_validate_reports_duplicate_master_files(project3):
     lines = []
     assert run_validate(project3, log=lines.append) is False
     assert any("ファイル走査" in line and "複数" in line for line in lines)
+
+
+def test_validate_y_ok_and_era_master_subset(tmp_path):
+    """Yファイルの検証がOKで、masters 限定世代では他マスターを未配置扱いしない。"""
+    from tests.conftest import make_project, y_row
+
+    project = make_project(tmp_path, ["r06", "r07"], masters={"r07": ["Y"]})
+    write_csv(project, "r06", "S", [s_row("111000110", price="291.00", ncols=150)])
+    write_csv(project, "r06", "T", [t_row("700010000", ncols=38)])
+    write_csv(project, "r06", "C", [c_row("10", "1", code="810000001", ncols=30)])
+    write_csv(project, "r06", "Y", [y_row("610000001", changed="20240601", ncols=42)])
+    write_csv(project, "r07", "Y", [y_row("610000001", changed="20250401", ncols=42)])
+    lines = []
+    assert run_validate(project, log=lines.append) is True
+    text = "\n".join(lines)
+    assert "r06/Y" in text
+    assert "r07/Y" in text
+    assert "r07/S" not in text and "r07/T" not in text and "r07/C" not in text  # 未配置扱いしない
+
+
+def test_validate_warns_unexpected_master_file(tmp_path):
+    """masters 限定世代に対象外マスターのCSVがあれば WARN(エラーにはしない)。"""
+    from tests.conftest import make_project, y_row
+
+    project = make_project(tmp_path, ["r07"], masters={"r07": ["Y"]})
+    write_csv(project, "r07", "Y", [y_row("610000001", ncols=42)])
+    write_csv(project, "r07", "S", [s_row("111000110", ncols=150)])
+    lines = []
+    assert run_validate(project, log=lines.append) is True
+    assert any("WARN" in line and "対象外" in line for line in lines)

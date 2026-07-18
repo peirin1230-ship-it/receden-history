@@ -153,7 +153,7 @@ def iter_rows_with_raw(f):
 
 
 def detect_master(path: Path) -> str | None:
-    """先頭行の2列目でマスター種別を判定。対象外(S/T/C以外)は None。
+    """先頭行の2列目でマスター種別を判定。対象外(S/Y/T/C以外)は None。
 
     先頭行が cp932 でデコードできない場合は UnicodeDecodeError を送出する
     (握りつぶすと誤エンコーディングのファイルが黙って無視されてしまうため)。
@@ -169,7 +169,7 @@ def scan_era_files(project: Project, era_id: str) -> tuple[dict[str, Path], list
     """世代ディレクトリの CSV をマスター種別ごとに対応付ける。
 
     戻り値: (マスター → ファイル, 問題のあるファイルのリスト[(path, 理由)])。
-    S/T/C 以外のマスター(医薬品等)のCSVは対象外として黙って無視する。
+    S/Y/T/C 以外のマスター(歯科・調剤等)のCSVは対象外として黙って無視する。
     """
     era_dir = project.raw_dir / era_id
     found: dict[str, Path] = {}
@@ -216,7 +216,7 @@ def normalize_record(master: str, layout: Layout, ml: MasterLayouts, row: list[s
     """CSV1行を records 相当の辞書に正規化する(REQUIREMENTS §5 F2)。"""
     fields = layout.map_row(row)
 
-    # コード: S/T は code 列そのまま。C は code 列があればそれ、なければ導出
+    # コード: S/Y/T は code 列そのまま。C は code 列があればそれ、なければ導出
     code = (fields.get("code") or "").strip()
     if not code and ml.has_code_derivation:
         code = derive_comment_code(fields.get("pattern", ""), fields.get("serial", ""))
@@ -335,8 +335,17 @@ def run_ingest(project: Project, *, era: str | None = None, force: bool = False,
                 log(f"  {e.id}: CSVなし(data/raw/{e.id}/ にファイルを配置してください)")
                 continue
             for master in MASTERS:
-                if master in files:
-                    ingest_file(conn, project, e.id, master, files[master], force=force, log=log)
+                if master not in files:
+                    continue
+                if master not in e.masters:
+                    # 対象外マスターのファイルを黙って取り込むと、マスター別の世代列から
+                    # 外れたスナップショットができてしまうためスキップして知らせる
+                    log(
+                        f"  {e.id}/{master}: この世代の対象外マスターのためスキップ"
+                        f"({files[master].name}。config/eras.yaml の masters を確認)"
+                    )
+                    continue
+                ingest_file(conn, project, e.id, master, files[master], force=force, log=log)
         # 取込済み世代×マスターの行数レポート(M1完了条件)
         log("\n== 取込状況(世代×マスター 行数) ==")
         rows = conn.execute(

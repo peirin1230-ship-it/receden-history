@@ -109,3 +109,18 @@ def test_search(project3):
     lines = []
     rc = run_search(project3, "1110001", log=lines.append)
     assert rc == 0 and any("111000110" in line for line in lines)
+
+
+def test_search_y_master(tmp_path):
+    """医薬品マスターの検索(--master Y 相当)。"""
+    from tests.conftest import make_project, y_row
+
+    project = make_project(tmp_path, ["r06", "r07"], masters={"r07": ["Y"]})
+    write_csv(project, "r06", "Y", [y_row("610000001", name="テスト錠１０ｍｇ", ncols=42)])
+    write_csv(project, "r07", "Y", [y_row("610000001", name="テスト錠１０ｍｇ", ncols=42)])
+    run_ingest(project, log=lambda *a: None)
+    run_build_history(project, log=lambda *a: None)
+    lines = []
+    rc = run_search(project, "テスト錠", master="Y", log=lines.append)
+    assert rc == 0
+    assert any("Y 610000001" in line for line in lines)

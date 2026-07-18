@@ -197,6 +197,7 @@ def run_validate(project: Project, *, era: str | None = None, master: str | None
     reports: list[FileReport] = []
     missing: list[str] = []
     problems: list[str] = []
+    unexpected: list[str] = []
     for e in eras:
         if era and e.id != era:
             continue
@@ -204,6 +205,10 @@ def run_validate(project: Project, *, era: str | None = None, master: str | None
         problems.extend(f"{e.id}/{p.name}: {reason}" for p, reason in era_problems)
         for m in MASTERS:
             if master and m != master:
+                continue
+            if m not in e.masters:
+                if m in files:
+                    unexpected.append(f"{e.id}/{m}({files[m].name})")
                 continue
             if m not in files:
                 missing.append(f"{e.id}/{m}")
@@ -213,6 +218,8 @@ def run_validate(project: Project, *, era: str | None = None, master: str | None
     ok = not problems
     for p in problems:
         log(f"[ERROR] ファイル走査: {p}")
+    for u in unexpected:
+        log(f"[WARN ] ファイル走査: {u}: この世代の対象外マスターのCSV(ingest ではスキップされます)")
     for rep in reports:
         status = "NG" if rep.has_error else "OK"
         log(f"\n=== [{status}] {rep.era}/{rep.master} {rep.path.name} ({rep.row_count}行) ===")

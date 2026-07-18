@@ -4,7 +4,7 @@
 
 ## 1. 目的
 
-医科診療報酬のレセ電コード(医科診療行為・特定器材・コメントの3マスター)について、
+医科診療報酬のレセ電コード(医科診療行為・医薬品・特定器材・コメントの4マスター)について、
 平成24年度改定以降の全件マスターを取り込み、**レセ電コードごとに
 「いつ新設され、いつ何が変更され、いつ廃止されたか」を照会できる**ようにする。
 照会UIは **GitHub Pages でホストする静的サイト** とし、ブラウザから検索・
@@ -27,23 +27,26 @@
 
 ### 対象
 
-- マスター: 医科診療行為(S)、特定器材(T)、コメント(C)
+- マスター: 医科診療行為(S)、医薬品(Y)、特定器材(T)、コメント(C)
+  ※ 医薬品は 2026-07 に追加。薬価は中間年にも改定されるため、医薬品のみの世代
+  (例: r07 = 令和7年度薬価改定)を `config/eras.yaml` の `masters: [Y]` で定義できる
 - 期間: 平成24年度改定(2012年度)〜現行(令和8年度)
 - 入力: 各世代の全件マスターCSV(ユーザーが手動ダウンロードして `data/raw/{era}/` に配置)
 
 ### 対象外(ただし拡張しやすい設計にする)
 
-- 医薬品(Y)・歯科(H)・調剤(M)・傷病名(B)等の他マスター
+- 歯科(H)・調剤(M)・傷病名(B)等の他マスター
 - 改定分ファイル(差分CSV)の取込 → Phase 2(M5)として設計だけ考慮
 - 労災レセプト電算処理マスター
 
 ## 4. 入力データ
 
-- 配置: `data/raw/{era}/*.csv`(era は `config/eras.yaml` の id: h24, h26, h28, h30, r01, r02, r04, r06, r08)
+- 配置: `data/raw/{era}/*.csv`(era は `config/eras.yaml` の id: h24, h26, h28, h30, r01, r02, r04, r06, r07, r08)
 - 形式: ヘッダ行なし、カンマ区切り、cp932、CRLF。詳細は `docs/FILE_LAYOUTS.md`
-- 1世代ディレクトリに S/T/C 3ファイルを想定。ファイル名は任意
+- 1世代ディレクトリにその世代が対象とするマスター(通常 S/Y/T/C の4ファイル、
+  薬価改定世代は Y のみ)を想定。ファイル名は任意
   (推奨: `s_ALLyyyymmdd.csv` 等)だが、**ツールはファイル名に依存せず
-  2列目のマスター種別(S/T/C)で自動判定**する
+  2列目のマスター種別(S/Y/T/C)で自動判定**する
 - ZIPのまま置かれた場合の自動展開は必須ではない(あれば便利程度)
 
 ## 5. 機能要件
@@ -62,7 +65,7 @@
 ファイル(=世代×マスター)ごとに以下を検査し、テキストレポートを出力する:
 
 1. cp932 デコード例外が0件
-2. 2列目がすべて期待するマスター種別文字(S/T/C)
+2. 2列目がすべて期待するマスター種別文字(S/Y/T/C)
 3. コード列が `^\d{9}$` に一致する率 ≥ 99%(コメントは導出後のコードで判定)
 4. 変更年月日・廃止年月日列が `^(0|\d{8})$` に一致する率 ≥ 99%
    → **不一致が多い場合はその世代のカラム位置がconfigとズレている疑い**。
@@ -76,7 +79,7 @@
 
 - `config/eras.yaml` の順序で各世代を処理
 - レコード正規化:
-  - コード: S/T は3列目そのまま。C は列23(コメントコード)があればそれ、
+  - コード: S/Y/T は3列目そのまま。C は列23(コメントコード)があればそれ、
     なければ `"8" + パターン.zfill(2) + 一連番号.zfill(6)` で導出
   - 日付列: `"0"`・空 → NULL、それ以外は `YYYYMMDD` 文字列のまま保持
   - layout で key を割り当てた列は個別カラム or `extra_json` に格納
@@ -118,7 +121,11 @@ S 111000110 初診料
 ### 6.1 スナップショットの順序と期間窓
 
 `config/eras.yaml` の並び順(古い順)を正とする。
-世代 N のスナップショットの「期間窓」= `[eras[N].effective_date, eras[N+1].effective_date)`。
+**期間窓はマスター別に計算する**: まず対象マスターが `masters` に含まれる世代だけに絞り、
+各世代の施行日を `effective_date_overrides`(あれば。例: 薬価改定は4/1)で差し替えた列を使う
+(実装: `config.EraSet.for_master`)。他マスター専用の世代(例: r07 = 薬価改定)が
+S/T/C の期間窓を分断してはならない。
+その列で、世代 N のスナップショットの「期間窓」= `[eras[N].effective_date, eras[N+1].effective_date)`。
 最終世代は `[effective_date, 取込日]`。
 
 ### 6.2 レコードキー
@@ -161,7 +168,7 @@ S 111000110 初診料
 |  | 上記以外 → 世代n+1 の effective_date | `era_boundary` |
 | changed | S_{n+1} 側レコードの変更年月日が期間窓内 → その日付 | `exact` |
 |  | 上記以外 → 世代n+1 の effective_date | `era_boundary` |
-| abolished | S_n 側レコードの廃止年月日(特定器材は経過措置年月日も考慮)があればその日付(=使用期限) | `exact` |
+| abolished | S_n 側レコードの廃止年月日(特定器材・医薬品は経過措置年月日も考慮し遅い方)があればその日付(=使用期限) | `exact` |
 |  | なければ 世代n+1 の effective_date | `era_boundary` |
 
 ### 6.6 既知の制約(ドキュメント化すること)
@@ -180,7 +187,7 @@ S 111000110 初診料
 CREATE TABLE snapshots(
   id           INTEGER PRIMARY KEY,
   era          TEXT NOT NULL,          -- eras.yaml の id
-  master       TEXT NOT NULL,          -- 'S' / 'T' / 'C'
+  master       TEXT NOT NULL,          -- 'S' / 'Y' / 'T' / 'C'
   file_name    TEXT NOT NULL,
   file_sha256  TEXT NOT NULL,
   column_count INTEGER,                -- 実測列数(最頻値)
@@ -221,11 +228,11 @@ CREATE INDEX idx_events_code ON events(master, code);
 ## 8. CLI仕様(案)
 
 ```
-receden validate [--era ERA] [--master S|T|C]
+receden validate [--era ERA] [--master S|Y|T|C]
 receden ingest   [--era ERA] [--force]
 receden build-history
 receden show <MASTER> <CODE> [--format text|json]
-receden search <KEYWORD> [--master S|T|C]
+receden search <KEYWORD> [--master S|Y|T|C]
 receden export      [--out exports/]     # 任意(M5)
 receden export-site [--out _site]        # GitHub Pages 用サイト生成
 ```
